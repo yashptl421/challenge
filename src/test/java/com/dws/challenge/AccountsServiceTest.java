@@ -1,6 +1,7 @@
 package com.dws.challenge;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.math.BigDecimal;
@@ -24,13 +25,29 @@ class AccountsServiceTest {
     @Autowired
     private AccountsService accountsService;
 
+    @BeforeEach
+    void setUp() {
+        accountsService.getAccountsRepository().clearAccounts();
+        Account a1 = new Account("Id-123", new BigDecimal(500));
+        Account a2 = new Account("Id-124", new BigDecimal(500));
+        Account a3 = new Account("Id-125", new BigDecimal(500));
+        Account a8 = new Account("Id-128", new BigDecimal(500));
+        Account a9 = new Account("Id-129", new BigDecimal(500));
+        this.accountsService.createAccount(a1);
+        this.accountsService.createAccount(a2);
+        this.accountsService.createAccount(a3);
+        this.accountsService.createAccount(a8);
+        this.accountsService.createAccount(a9);
+
+    }
+
     @Test
     void addAccount() {
-        Account account = new Account("Id-123");
+        Account account = new Account("Id-126");
         account.setBalance(new BigDecimal(1000));
         this.accountsService.createAccount(account);
 
-        assertThat(this.accountsService.getAccount("Id-123")).isEqualTo(account);
+        assertThat(this.accountsService.getAccount("Id-126")).isEqualTo(account);
     }
 
     @Test
@@ -49,44 +66,55 @@ class AccountsServiceTest {
 
     @Test
     void fundTransfer() {
-
-        Account a2 = new Account("Id-124", new BigDecimal(500));
-        Account a3 = new Account("Id-125", new BigDecimal(50000));
-        this.accountsService.createAccount(a2);
-        this.accountsService.createAccount(a3);
-
-        FundTransfer fundTransfer = new FundTransfer("Id-123", "Id-124", new BigDecimal(500));
+        FundTransfer fundTransfer = new FundTransfer("Id-124", "Id-125", new BigDecimal(500));
         this.accountsService.fundTransfer(fundTransfer);
-        Account account = new Account("Id-124", new BigDecimal(1000));
-        assertThat(this.accountsService.getAccount("Id-124")).isEqualTo(account);
+        assertThat(this.accountsService.getAccount("Id-125").getBalance()).isEqualTo(new BigDecimal(1000));
     }
 
     @Test
-    void invalideAmountTransfer() {
-        Account a2 = new Account("Id-126", new BigDecimal(500));
-        Account a3 = new Account("Id-127", new BigDecimal(50000));
-        this.accountsService.createAccount(a2);
-        this.accountsService.createAccount(a3);
-
-        FundTransfer fundTransfer = new FundTransfer("Id-126", "Id-127", new BigDecimal(50));
-
+    void invalidAmountTransfer() {
+        FundTransfer fundTransfer = new FundTransfer("Id-124", "Id-125", new BigDecimal(-500));
         try {
             this.accountsService.fundTransfer(fundTransfer);
-            Account account = new Account("Id-124", new BigDecimal(500));
         } catch (InvalidAmountException ex) {
             assertThat(ex.getMessage()).isEqualTo("Invalid amount, negative or zero value not acceptable");
         }
     }
+
     @Test
     void insufficientBalanceFundTransfer() {
-
-        FundTransfer fundTransfer = new FundTransfer("Id-126", "Id-127", new BigDecimal(70000));
-
+        FundTransfer fundTransfer = new FundTransfer("Id-124", "Id-125", new BigDecimal(50000));
         try {
             this.accountsService.fundTransfer(fundTransfer);
-            Account account = new Account("Id-124", new BigDecimal(500));
         } catch (InvalidAmountException ex) {
-            assertThat(ex.getMessage()).isEqualTo("Insufficient Balance to make transaction against account id[Id-126]");
+            assertThat(ex.getMessage()).isEqualTo("Insufficient Balance to make transaction against account id[Id-124]");
         }
+    }
+
+    @Test
+    void testConcurrentTransfers() throws InterruptedException {
+        Runnable transfer1 = () -> accountsService.fundTransfer(new FundTransfer("Id-123", "Id-124", new BigDecimal(100)));
+        Runnable transfer2 = () -> accountsService.fundTransfer(new FundTransfer("Id-124", "Id-125", new BigDecimal(200)));
+        Runnable transfer3 = () -> accountsService.fundTransfer(new FundTransfer("Id-125", "Id-123", new BigDecimal(300)));
+        Runnable transfer4 = () -> accountsService.fundTransfer(new FundTransfer("Id-128", "Id-129", new BigDecimal(500)));
+
+        Thread t1 = new Thread(transfer1);
+        Thread t2 = new Thread(transfer2);
+        Thread t3 = new Thread(transfer3);
+        Thread t4 = new Thread(transfer4);
+
+        t1.start();
+        t2.start();
+        t3.start();
+        t4.start();
+
+        t1.join();
+        t2.join();
+        t3.join();
+
+        assertEquals(new BigDecimal(700), accountsService.getAccount("Id-123").getBalance());
+        assertEquals(new BigDecimal(400), accountsService.getAccount("Id-124").getBalance());
+        assertEquals(new BigDecimal(400), accountsService.getAccount("Id-125").getBalance());
+        assertEquals(new BigDecimal(1000), accountsService.getAccount("Id-129").getBalance());
     }
 }

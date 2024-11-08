@@ -107,24 +107,32 @@ class AccountsControllerTest {
     void fundTransfer() throws Exception {
         Account a1 = new Account("Id-123", new BigDecimal(5000));
         Account a2 = new Account("Id-124", new BigDecimal(5000));
-        Account a3 = new Account("Id-125", new BigDecimal(50000));
 
         accountsService.getAccountsRepository().createAccount(a1);
         accountsService.getAccountsRepository().createAccount(a2);
-        accountsService.getAccountsRepository().createAccount(a3);
 
         this.mockMvc.perform(put("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"fromAccountId\":\"Id-123\",\"toAccountId\":\"Id-124\", \"amount\":1000}")).andExpect(status().isCreated());
 
         Account fromAccount = accountsService.getAccount("Id-123");
         Account toAccount = accountsService.getAccount("Id-124");
-        assertThat(fromAccount.getAccountId()).isEqualTo("Id-123");
-        assertThat(toAccount.getAccountId()).isEqualTo("Id-124");
+        assertThat(fromAccount.getBalance()).isEqualTo(new BigDecimal(4000));
+        assertThat(toAccount.getBalance()).isEqualTo(new BigDecimal(6000));
     }
 
     @Test
-    void failedFundTransfer() throws Exception {
+    void fundTransferWithNoAmount() throws Exception {
         this.mockMvc.perform(put("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"fromAccountId\":\"Id-123\",\"toAccountId\":\"Id-124\", \"amount\":0}")).andExpect(status().isBadRequest());
+    }
+    @Test
+    void fundTransferWithNegativeAmount() throws Exception {
+        this.mockMvc.perform(put("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fromAccountId\":\"Id-123\",\"toAccountId\":\"Id-124\", \"amount\":-880}")).andExpect(status().isBadRequest());
+    }
+    @Test
+    void fundTransferWithEmptyAccountId() throws Exception {
+        this.mockMvc.perform(put("/v1/accounts").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"fromAccountId\":\"\",\"toAccountId\":\"Id-124\", \"amount\":880}")).andExpect(status().isBadRequest());
     }
 }
